@@ -70,6 +70,7 @@ body {
 
 .main-panel {
   padding: 22px;
+  overflow: auto;
 }
 
 .page-header h1 {
@@ -105,6 +106,19 @@ body {
   gap: 8px;
 }
 
+.cards-stack {
+  display: grid;
+  gap: 12px;
+  margin-top: 1rem;
+}
+
+.toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+}
+
 .button-group {
   display: flex;
   gap: 8px;
@@ -123,6 +137,35 @@ body {
   border-color: #0f766e;
   background: #ccfbf1;
   color: #134e4a;
+}
+
+.primary-btn,
+.subtle-btn,
+.danger-btn {
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 0.5rem 0.8rem;
+  font: inherit;
+  background: #ffffff;
+}
+
+.primary-btn {
+  background: #0f766e;
+  color: #ffffff;
+  border-color: #0f766e;
+}
+
+.danger-btn {
+  border-color: #fecaca;
+  background: #fff1f2;
+  color: #9f1239;
+}
+
+.row-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 .select,
@@ -154,8 +197,18 @@ body {
 .preview-panel {
   padding: 20px;
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.preview-actions {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  justify-content: center;
+  flex-wrap: wrap;
 }
 
 .phone-frame {
@@ -189,6 +242,9 @@ body {
   margin: 0 auto;
   background: rgba(255, 255, 255, 0.4);
   border: 2px solid rgba(255, 255, 255, 0.7);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
 }
 
 .profile.compact .avatar {
@@ -209,6 +265,12 @@ body {
   display: grid;
   gap: 10px;
   margin-top: 24px;
+}
+
+.audience-preview {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
 }
 
 .preview-button {
@@ -238,6 +300,77 @@ footer {
   text-align: center;
   font-size: 0.78rem;
   opacity: 0.9;
+}
+
+.metric {
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.metric.small {
+  font-size: 1.1rem;
+  line-height: 1.35;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.empty-state,
+.empty-preview {
+  border: 1px dashed rgba(255, 255, 255, 0.45);
+  border-radius: 10px;
+  padding: 0.7rem;
+  color: #64748b;
+  background: #f8fafc;
+}
+
+.empty-preview {
+  color: #e2e8f0;
+  border-color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.toast-wrap {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  display: grid;
+  gap: 8px;
+  z-index: 80;
+}
+
+.toast {
+  background: #0f172a;
+  color: #fff;
+  border-radius: 10px;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.9rem;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.55);
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.modal-card {
+  width: min(420px, 100%);
+  background: #fff;
+  border-radius: 20px;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.close-btn {
+  justify-self: end;
 }
 
 @media (max-width: 1200px) {
