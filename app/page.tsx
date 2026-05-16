@@ -23,12 +23,24 @@ type DesignData = {
 };
 type AnalyticsData = { views: number; totalClicks: number; linkClicks: Record<string, number> };
 type AudienceData = { enabled: boolean; placeholder: string; buttonText: string; emails: string[] };
+type SocialPlatform = "tiktok" | "whatsapp" | "instagram" | "youtube" | "x" | "facebook" | "linkedin" | "email";
+type SocialAccount = {
+  platform: SocialPlatform;
+  label: string;
+  username?: string;
+  url: string;
+  phone?: string;
+  message?: string;
+  subject?: string;
+  body?: string;
+};
 type LinkDeskData = {
   profile: ProfileData;
   design: DesignData;
   links: LinkItem[];
   analytics: AnalyticsData;
   audience: AudienceData;
+  socials: Partial<Record<SocialPlatform, SocialAccount>>;
 };
 
 const STORAGE_KEY = "linkdesk_mvp_data";
@@ -56,7 +68,8 @@ const defaultData: LinkDeskData = {
     { id: "l3", title: "WhatsApp", url: "https://wa.me/100000000", isActive: true, order: 2 }
   ],
   analytics: { views: 120, totalClicks: 36, linkClicks: { l1: 14, l2: 12, l3: 10 } },
-  audience: { enabled: false, placeholder: "Enter your email", buttonText: "Subscribe", emails: [] }
+  audience: { enabled: false, placeholder: "Enter your email", buttonText: "Subscribe", emails: [] },
+  socials: {}
 };
 
 const themeDefaults: Record<ThemePreset, Pick<DesignData, "primaryColor" | "accentColor" | "wallpaper" | "buttonStyle" | "font">> = {
@@ -72,13 +85,18 @@ export default function Page() {
   const [ready, setReady] = useState(false);
   const [toasts, setToasts] = useState<{ id: number; message: string }[]>([]);
   const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showSocialModal, setShowSocialModal] = useState(false);
+  const [editingPlatform, setEditingPlatform] = useState<SocialPlatform | null>(null);
+  const [socialDraft, setSocialDraft] = useState<Record<string, string>>({});
+  const [socialError, setSocialError] = useState("");
 
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       try {
         const parsed = JSON.parse(saved) as Partial<LinkDeskData>;
-        setData({ ...defaultData, ...parsed, profile: { ...defaultData.profile, ...parsed.profile }, design: { ...defaultData.design, ...parsed.design }, audience: { ...defaultData.audience, ...parsed.audience }, analytics: { ...defaultData.analytics, ...parsed.analytics } });
+        setData({ ...defaultData, ...parsed, profile: { ...defaultData.profile, ...parsed.profile }, design: { ...defaultData.design, ...parsed.design }, audience: { ...defaultData.audience, ...parsed.audience }, analytics: { ...defaultData.analytics, ...parsed.analytics }, socials: { ...defaultData.socials, ...parsed.socials } });
       } catch {
         setData(defaultData);
       }
@@ -145,13 +163,112 @@ export default function Page() {
     URL.revokeObjectURL(a.href);
   };
 
+  const platformMeta: { id: SocialPlatform; name: string; icon: string }[] = [
+    { id: "tiktok", name: "TikTok", icon: "TT" },
+    { id: "whatsapp", name: "WhatsApp", icon: "WA" },
+    { id: "instagram", name: "Instagram", icon: "IG" },
+    { id: "youtube", name: "YouTube", icon: "YT" },
+    { id: "x", name: "X / Twitter", icon: "X" },
+    { id: "facebook", name: "Facebook", icon: "FB" },
+    { id: "linkedin", name: "LinkedIn", icon: "IN" },
+    { id: "email", name: "Email", icon: "@" }
+  ];
+
+  const openSocialEditor = (platform: SocialPlatform) => {
+    const existing = data.socials[platform];
+    setEditingPlatform(platform);
+    setSocialError("");
+    setSocialDraft({
+      username: existing?.username || "",
+      url: existing?.url || "",
+      label: existing?.label || (platform === "whatsapp" ? "WhatsApp" : platformMeta.find((p) => p.id === platform)?.name || ""),
+      phone: existing?.phone || "",
+      message: existing?.message || "",
+      subject: existing?.subject || "",
+      body: existing?.body || ""
+    });
+  };
+
+  const saveSocial = () => {
+    if (!editingPlatform) return;
+    const d = socialDraft;
+    if (editingPlatform === "tiktok") {
+      if (!d.username?.trim()) return setSocialError("Username cannot be empty.");
+      if (!/^https:\/\/(www\.)?tiktok\.com\//.test(d.url || "")) return setSocialError("TikTok URL must start with https://www.tiktok.com/ or https://tiktok.com/");
+    }
+    if (editingPlatform === "whatsapp") {
+      if (!d.phone?.trim()) return setSocialError("Phone number cannot be empty.");
+      if (!d.label?.trim()) return setSocialError("Display label cannot be empty.");
+      const clean = (d.phone || "").replace(/\D/g, "");
+      const msg = encodeURIComponent(d.message || "");
+      d.url = `https://wa.me/${clean}${msg ? `?text=${msg}` : ""}`;
+    }
+    if (editingPlatform === "email") {
+      if (!d.username?.trim()) return setSocialError("Email address cannot be empty.");
+      d.url = `mailto:${d.username}?subject=${encodeURIComponent(d.subject || "")}&body=${encodeURIComponent(d.body || "")}`;
+    }
+    if (editingPlatform !== "whatsapp" && editingPlatform !== "tiktok" && editingPlatform !== "email") {
+      if (!d.username?.trim()) return setSocialError("Username cannot be empty.");
+      if (!d.url?.trim()) return setSocialError("URL cannot be empty.");
+      if (!d.label?.trim()) return setSocialError("Display label cannot be empty.");
+    }
+
+    const payload: SocialAccount = {
+      platform: editingPlatform,
+      label: d.label || platformMeta.find((p) => p.id === editingPlatform)?.name || "",
+      username: d.username,
+      url: d.url || "",
+      phone: d.phone,
+      message: d.message,
+      subject: d.subject,
+      body: d.body
+    };
+
+    setData((p) => {
+      let links = p.links;
+      if (editingPlatform === "whatsapp") {
+        const existing = links.find((l) => l.title.toLowerCase().includes("whatsapp") || l.url.includes("wa.me"));
+        if (existing) {
+          links = links.map((l) => (l.id === existing.id ? { ...l, title: payload.label, url: payload.url, isActive: true } : l));
+        } else {
+          links = [...links, { id: crypto.randomUUID(), title: payload.label, url: payload.url, isActive: true, order: links.length }];
+        }
+      }
+      return { ...p, socials: { ...p.socials, [editingPlatform]: payload }, links };
+    });
+
+    showToast(`${platformMeta.find((p) => p.id === editingPlatform)?.name} connected`);
+    setEditingPlatform(null);
+  };
+
+  const disconnectSocial = (platform: SocialPlatform) => {
+    if (!window.confirm("Disconnect this social account?")) return;
+    setData((p) => {
+      const next = { ...p.socials };
+      delete next[platform];
+      return { ...p, socials: next };
+    });
+    showToast("Account disconnected");
+    setEditingPlatform(null);
+  };
+
   const renderMain = () => {
     if (tab === "links") {
       const sorted = [...data.links].sort((a, b) => a.order - b.order);
       return (
         <>
           <header className="page-header"><h1>Links</h1><p>Manage your public links and order.</p></header>
-          <div className="toolbar"><button className="primary-btn" onClick={addLink}>Add Link</button></div>
+          <Card title="Profile Header">
+            <div className="profile-head-mini">
+              <div className="avatar avatar-mini">{data.profile.avatar || "DL"}</div>
+              <div>
+                <strong>{data.profile.displayName}</strong>
+                <p>{data.profile.bio}</p>
+              </div>
+              <button className="subtle-btn" onClick={() => setShowSocialModal(true)}>Connect social</button>
+            </div>
+          </Card>
+          <div className="toolbar"><button className="primary-btn" onClick={addLink}>Add Link</button><button className="subtle-btn" onClick={() => setShowSocialModal(true)}>Add social icon</button></div>
           <section className="cards-stack">
             {sorted.length === 0 && <div className="empty-state">No links yet. Add your first link.</div>}
             {sorted.map((link, i) => (
@@ -207,6 +324,7 @@ export default function Page() {
               {data.audience.emails.length === 0 ? <div className="empty-state">No audience members yet.</div> : data.audience.emails.map((e, i) => <div key={`${e}-${i}`} className="stat-row"><span>{e}</span></div>)}
               <button className="danger-btn" onClick={() => setData((p) => ({ ...p, audience: { ...p.audience, emails: [] } }))}>Clear audience list</button>
             </Card>
+            <Card title="Tools"><button className="subtle-btn" onClick={() => setShowSocialModal(true)}>Connect social media</button></Card>
           </section>
         </>
       );
@@ -246,6 +364,7 @@ export default function Page() {
             <button key={item} className={tab === item ? "nav-item active" : "nav-item"} onClick={() => setTab(item)}>{item[0].toUpperCase() + item.slice(1)}</button>
           ))}
         </nav>
+        <button className="subtle-btn" onClick={() => setShowSettingsModal(true)}>Settings</button>
       </aside>
       <main className="main-panel">{renderMain()}</main>
       <aside className="preview-panel">
@@ -269,6 +388,62 @@ export default function Page() {
           }}
         />
       </aside>
+      {showSettingsModal && (
+        <div className="modal-overlay">
+          <div className="modal-card">
+            <button className="subtle-btn close-btn" onClick={() => setShowSettingsModal(false)}>Close</button>
+            <h3>Settings</h3>
+            <p>Connected social accounts</p>
+            <div className="connected-list">
+              {Object.values(data.socials).length === 0 ? <div className="empty-state">No social accounts connected.</div> : Object.values(data.socials).map((s) => <div key={s?.platform} className="stat-row"><span>{platformMeta.find((p) => p.id === s?.platform)?.name}</span><strong>{s?.label}</strong></div>)}
+            </div>
+            <button className="subtle-btn" onClick={() => { setShowSettingsModal(false); setShowSocialModal(true); }}>Connect social media</button>
+          </div>
+        </div>
+      )}
+      {showSocialModal && (
+        <div className="modal-overlay">
+          <div className="modal-card social-modal">
+            <button className="subtle-btn close-btn" onClick={() => { setShowSocialModal(false); setEditingPlatform(null); }}>Close</button>
+            <h3>Connect social media</h3>
+            <p>Add your social accounts to show them on your public page.</p>
+            <div className="social-grid">
+              {platformMeta.map((p) => {
+                const connected = data.socials[p.id];
+                return (
+                  <div key={p.id} className="social-card">
+                    <div className="social-icon">{p.icon}</div>
+                    <div>
+                      <strong>{p.name}</strong>
+                      <div className={connected ? "badge connected" : "badge"}>{connected ? "Connected" : "Not connected"}</div>
+                      {connected && <small>{connected.username || connected.label}</small>}
+                    </div>
+                    <div className="row-actions">
+                      {!connected && <button className="subtle-btn" onClick={() => openSocialEditor(p.id)}>Connect</button>}
+                      {connected && <button className="subtle-btn" onClick={() => openSocialEditor(p.id)}>Edit</button>}
+                      {connected && <button className="danger-btn" onClick={() => disconnectSocial(p.id)}>Disconnect</button>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {editingPlatform && (
+              <Card title={`Edit ${platformMeta.find((p) => p.id === editingPlatform)?.name}`}>
+                {editingPlatform !== "whatsapp" && editingPlatform !== "email" && <input className="text-input" placeholder="Username or handle" value={socialDraft.username || ""} onChange={(e) => setSocialDraft((p) => ({ ...p, username: e.target.value }))} />}
+                {editingPlatform === "email" && <input className="text-input" placeholder="Email address" value={socialDraft.username || ""} onChange={(e) => setSocialDraft((p) => ({ ...p, username: e.target.value }))} />}
+                {editingPlatform === "whatsapp" && <input className="text-input" placeholder="WhatsApp phone number" value={socialDraft.phone || ""} onChange={(e) => setSocialDraft((p) => ({ ...p, phone: e.target.value }))} />}
+                {editingPlatform !== "email" && editingPlatform !== "whatsapp" && <input className="text-input" placeholder="Profile URL" value={socialDraft.url || ""} onChange={(e) => setSocialDraft((p) => ({ ...p, url: e.target.value }))} />}
+                {editingPlatform !== "tiktok" && <input className="text-input" placeholder="Display label" value={socialDraft.label || ""} onChange={(e) => setSocialDraft((p) => ({ ...p, label: e.target.value }))} />}
+                {editingPlatform === "whatsapp" && <input className="text-input" placeholder="Optional pre-filled message" value={socialDraft.message || ""} onChange={(e) => setSocialDraft((p) => ({ ...p, message: e.target.value }))} />}
+                {editingPlatform === "email" && <input className="text-input" placeholder="Subject" value={socialDraft.subject || ""} onChange={(e) => setSocialDraft((p) => ({ ...p, subject: e.target.value }))} />}
+                {editingPlatform === "email" && <textarea className="text-input" placeholder="Body" rows={2} value={socialDraft.body || ""} onChange={(e) => setSocialDraft((p) => ({ ...p, body: e.target.value }))} />}
+                {socialError && <div className="error-text">{socialError}</div>}
+                <div className="row-actions"><button className="primary-btn" onClick={saveSocial}>Save</button><button className="subtle-btn" onClick={() => setEditingPlatform(null)}>Cancel</button></div>
+              </Card>
+            )}
+          </div>
+        </div>
+      )}
       {showPreviewModal && <div className="modal-overlay"><div className="modal-card"><button className="subtle-btn close-btn" onClick={() => setShowPreviewModal(false)}>Close</button><PreviewCard data={data} previewStyles={previewStyles} activeLinks={activeLinks} draftEmail={draftEmail} setDraftEmail={setDraftEmail} onClickLink={trackClick} onSubscribe={() => {}} /></div></div>}
       <div className="toast-wrap">{toasts.map((t) => <div key={t.id} className="toast">{t.message}</div>)}</div>
     </div>
@@ -276,8 +451,9 @@ export default function Page() {
 }
 
 function PreviewCard({ data, previewStyles, activeLinks, draftEmail, setDraftEmail, onClickLink, onSubscribe }: { data: LinkDeskData; previewStyles: React.CSSProperties; activeLinks: LinkItem[]; draftEmail: string; setDraftEmail: (v: string) => void; onClickLink: (id: string) => void; onSubscribe: () => void }) {
+  const socials = Object.values(data.socials).filter(Boolean) as SocialAccount[];
   return (
-    <div className="phone-frame"><div className="phone-screen" style={previewStyles}><div className={data.design.headerStyle === "compact" ? "profile compact" : "profile centered"}><div className="avatar">{data.profile.avatar || "DL"}</div><h2>{data.profile.displayName || "@demo_creator"}</h2>{data.profile.bio.trim() && <p>{data.profile.bio}</p>}</div><div className="links">{activeLinks.map((l) => <button key={l.id} className={`preview-button ${data.design.buttonStyle}`} onClick={() => onClickLink(l.id)} title={l.url}>{l.title}</button>)}{activeLinks.length === 0 && <div className="empty-preview">No active links</div>}</div>{data.audience.enabled && <div className="audience-preview"><input className="text-input" value={draftEmail} onChange={(e) => setDraftEmail(e.target.value)} placeholder={data.audience.placeholder} /><button className={`preview-button ${data.design.buttonStyle}`} onClick={onSubscribe}>{data.audience.buttonText}</button></div>}{data.design.showFooter && <footer>Made with LinkDesk</footer>}</div></div>
+    <div className="phone-frame"><div className="phone-screen" style={previewStyles}><div className={data.design.headerStyle === "compact" ? "profile compact" : "profile centered"}><div className="avatar">{data.profile.avatar || "DL"}</div><h2>{data.profile.displayName || "@demo_creator"}</h2>{data.profile.bio.trim() && <p>{data.profile.bio}</p>}</div><div className="social-strip">{socials.map((s) => <button key={s.platform} className="social-pill" title={s.label}>{s.platform.slice(0, 2).toUpperCase()}</button>)}</div><div className="links">{activeLinks.map((l) => <button key={l.id} className={`preview-button ${data.design.buttonStyle}`} onClick={() => onClickLink(l.id)} title={l.url}>{l.title}</button>)}{activeLinks.length === 0 && <div className="empty-preview">No active links</div>}</div>{data.audience.enabled && <div className="audience-preview"><input className="text-input" value={draftEmail} onChange={(e) => setDraftEmail(e.target.value)} placeholder={data.audience.placeholder} /><button className={`preview-button ${data.design.buttonStyle}`} onClick={onSubscribe}>{data.audience.buttonText}</button></div>}{data.design.showFooter && <footer>Made with LinkDesk</footer>}</div></div>
   );
 }
 
